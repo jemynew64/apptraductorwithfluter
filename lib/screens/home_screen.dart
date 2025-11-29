@@ -24,12 +24,17 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isListening = false;
   bool _overlayActive = false;
   bool _autoSpeakEnabled = false; // 🔊 Lectura automática de traducciones
+  
+  // Modo Manga
+  bool _mangaModeActive = false;
+  bool _scrollServiceEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _requestPermissions();
     _setupMethodChannelHandler();
+    _checkScrollServiceStatus();
   }
 
   // Configurar listener para capturas de pantalla desde la burbuja
@@ -40,8 +45,66 @@ class _HomeScreenState extends State<HomeScreen> {
         if (imagePath != null) {
           await _processScreenCapture(imagePath);
         }
+      } else if (call.method == 'onMangaModeChanged') {
+        final bool isActive = call.arguments as bool;
+        setState(() {
+          _mangaModeActive = isActive;
+        });
       }
     });
+  }
+  
+  // Verificar si el servicio de accesibilidad está habilitado
+  Future<void> _checkScrollServiceStatus() async {
+    try {
+      final bool isEnabled = await platform.invokeMethod('isScrollServiceEnabled');
+      final bool isMangaModeActive = await platform.invokeMethod('isMangaModeActive');
+      setState(() {
+        _scrollServiceEnabled = isEnabled;
+        _mangaModeActive = isMangaModeActive;
+      });
+    } catch (e) {
+      print('Error verificando servicio: $e');
+    }
+  }
+  
+  // Abrir configuración de accesibilidad
+  Future<void> _openScrollServiceSettings() async {
+    try {
+      await platform.invokeMethod('openScrollServiceSettings');
+    } catch (e) {
+      print('Error abriendo configuración: $e');
+    }
+  }
+  
+  // Activar/desactivar modo manga
+  Future<void> _toggleMangaMode() async {
+    if (!_scrollServiceEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Primero debes habilitar el servicio de accesibilidad'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    
+    if (!_overlayActive) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Primero activa la burbuja flotante'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    
+    try {
+      await platform.invokeMethod('toggleMangaMode');
+      await _checkScrollServiceStatus();
+    } catch (e) {
+      print('Error toggling manga mode: $e');
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -77,6 +140,18 @@ class _HomeScreenState extends State<HomeScreen> {
     // 🔊 Auto-lectura si está activada (funciona en segundo plano)
     if (_autoSpeakEnabled && !translated.startsWith('❌') && !translated.startsWith('⏳')) {
       await _speakTranslation();
+    }
+
+    // Si estamos en modo manga, mostrar overlay nativo
+    if (_mangaModeActive && _overlayActive) {
+      try {
+        await platform.invokeMethod('showTranslation', {
+          'originalText': cleanedText,
+          'translatedText': translated,
+        });
+      } catch (e) {
+        print('Error mostrando overlay: $e');
+      }
     }
 
     // Mostrar notificación SOLO si se solicita explícitamente (capturas manuales)
@@ -295,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (_overlayActive) ...[
                       const SizedBox(height: 8),
                       Text(
-                        '💡 Toca la burbuja para traducir lo que veas en pantalla',
+                        '💡 Doble-toca la burbuja para activar Modo Manga',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.blue[700],
@@ -304,6 +379,122 @@ class _HomeScreenState extends State<HomeScreen> {
                         textAlign: TextAlign.center,
                       ),
                     ],
+                    const SizedBox(height: 12),
+                    
+                    // MODO MANGA
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.auto_awesome, color: Colors.purple[700]),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Modo Manga',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.purple[900],
+                                ),
+                              ),
+                              const Spacer(),
+                              if (_mangaModeActive)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text(
+                                    'ACTIVO',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Traduce automáticamente cuando dejas de hacer scroll',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.purple[700],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          
+                          // Estado del servicio
+                          if (!_scrollServiceEnabled) ...[
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.orange[100],
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.warning, color: Colors.orange[900], size: 20),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Servicio de accesibilidad no habilitado',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.orange[900],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ElevatedButton.icon(
+                              onPressed: _openScrollServiceSettings,
+                              icon: const Icon(Icons.settings, size: 18),
+                              label: const Text('Habilitar Servicio'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(double.infinity, 40),
+                              ),
+                            ),
+                          ] else ...[
+                            // Botón activar/desactivar modo manga
+                            ElevatedButton.icon(
+                              onPressed: _toggleMangaMode,
+                              icon: Icon(_mangaModeActive ? Icons.pause : Icons.play_arrow),
+                              label: Text(_mangaModeActive 
+                                  ? 'Desactivar Modo Manga' 
+                                  : 'Activar Modo Manga'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _mangaModeActive ? Colors.red : Colors.purple,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(double.infinity, 40),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Text(
+                            'ℹ️ Uso: 1) Habilita el servicio, 2) Activa la burbuja, 3) Doble-toca la burbuja',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.purple[600],
+                              fontStyle: FontStyle.italic,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     
                     // Botón Auto-Lectura

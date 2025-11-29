@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Traductor Flotante</string>
+    <string name="scroll_service_description">Detecta cuando dejas de hacer scroll para traducir automáticamente la página visible. Solo se usa en Modo Manga.</string>
+</resources>

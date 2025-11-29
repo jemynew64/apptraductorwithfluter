@@ -29,6 +29,9 @@ dependencies:
   
   # Gestión de estado
   provider: ^6.1.1
+  
+  # Procesamiento de imágenes
+  image: ^4.1.7
 
 dev_dependencies:
   flutter_test:

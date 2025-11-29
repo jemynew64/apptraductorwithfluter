@@ -35,6 +35,10 @@ class ScreenCaptureService : Service() {
         const val EXTRA_DATA = "data"
         
         var callback: ((String?) -> Unit)? = null
+        
+        // Credenciales guardadas para reuso en modo manga
+        var savedResultCode: Int? = null
+        var savedData: Intent? = null
     }
 
     private var mediaProjection: MediaProjection? = null
